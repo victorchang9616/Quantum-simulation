@@ -6,13 +6,18 @@
 
 using namespace std;
 
-// for ferromagnetic ising model J=1
-double J = 1, T, w[17];                 
-int Lx, Ly, N, **s;                                                           
-
+// Global variables
+                
+int Lx, Ly, N;// size and number of sites of system 
+int **spinmesh; // spin sites matrix                                                
+double J = 1, T, Ttarget=4.0,BoltzmannFactors[17];
+double eacu, macu, m2ac, *corree, *corrmm;                
+int ncorrt = 10, Config;                 
+list<double> elist, mlist;
 void ComputeBoltzmannFactors() {
-	for (int i = -8; i <= 8; i += 4) {
-		w[i + 8] = exp(-(i * J ) / T);
+	for (int i = -8; i <= 8; i += 4) 
+	{
+		BoltzmannFactors[i + 8] = exp(-(i * J ) / T);
 	}
 }
 // generate ramdom number from 0 to 1
@@ -21,190 +26,246 @@ inline double std_rand()
 	return rand() / (RAND_MAX + 1.0);
 }
 
-double eAv, mAv, m2Av, *cee, *cmm;                
-int nSave = 10, Count, steps = 0;                 
-list<double> eSave, mSave;  
+  
 
-// randomly choose +1/-1 for each cite
+// randomly choose +1/-1 for each site
 void Initialize() {
 	int i, j;
-	s = new int*[Lx];
+	spinmesh = new int*[Lx];
 	for (i = 0; i < Lx; i++)
-		s[i] = new int[Ly];
+		spinmesh[i] = new int[Ly];
 	for (i = 0; i < Lx; i++)
-		for (j = 0; j < Ly; j++){
-		if (std_rand() < 0.5) s[i][j] = 1;
-		else s[i][j] = -1;
+		for (j = 0; j < Ly; j++)
+		{
+		if (std_rand() < 0.5) spinmesh[i][j] = 1;
+		else spinmesh[i][j] = -1;
 		}			
-	steps = 0;
+
 }
 
-void InitializeData() {
-	int i;
-	eAv = mAv = m2Av = 0;
-	eSave.clear();
-	mSave.clear();
-	if (cee != NULL) delete[] cee;
-	if (cmm != NULL) delete[] cmm;
-	cee = new double[nSave + 1];
-	cmm = new double[nSave + 1];
-	for (i = 0; i <= nSave; i++)
-		cee[i] = cmm[i] = 0;
-	Count = 0;
-}
+void Initiallist() {
 
+	eacu = macu = m2ac = 0;
+	elist.clear();
+	mlist.clear();
+	if (corree != NULL) delete[] corree;
+	if (corrmm != NULL) delete[] corrmm;
+	corree = new double[ncorrt + 1];
+	corrmm = new double[ncorrt + 1];
+	for (int i = 0; i <= ncorrt; i++) 
+	{
+		corree[i] = 0.0;
+		corrmm[i] = 0.0;
+	}
+	Config = 0;
+}
+/*
 void MetropolisStep() {
-	int i, j, iPrev, iNext, jPrev, jNext, sum, deltaE;
-	double ratio;
+	double rate;	
+	int i, j, ileft, iright, jdown, jup, deltaE;
 	i = int(Lx*std_rand());
 	j = int(Ly*std_rand());
-
-	// periodic boundary conditions
-	if(i == 0) iPrev = Lx - 1;
-	else iPrev = i - 1;
+	if(i == 0) ileft = Lx - 1;
+	else ileft = i - 1;
 	
-	if(i == Lx - 1) iNext = 0;
-	else iNext = i + 1;
+	if(i == Lx - 1) iright = 0;
+	else iright = i + 1;
 
-	if(j == 0) jPrev = Ly - 1;
-	else jPrev = j - 1;
+	if(j == 0) jdown = Ly - 1;
+	else jdown = j - 1;
 
-	if(j == Ly - 1) jNext = 0;
-	else jNext = j + 1;
-
-	sum = s[iPrev][j] + s[iNext][j] + s[i][jPrev] + s[i][jNext];
-	deltaE = 2 * s[i][j] * sum;
-	ratio = w[deltaE + 8];
-	if (std_rand() < ratio) {
-		s[i][j] = -s[i][j];
+	if(j == Ly - 1) jup = 0;
+	else jup = j + 1;
+	deltaE = 2 * spinmesh[i][j] * (spinmesh[ileft][j] + spinmesh[iright][j] + spinmesh[i][jdown] + spinmesh[i][jup]);
+	rate = BoltzmannFactors[deltaE + 8];
+	if (std_rand() < ratio) 
+	{
+		spinmesh[i][j] = -spinmesh[i][j];
 	}	
 }
+*/
+void MCScreen() 
+{
+	for (int dice = 0; dice < N; dice++)
+	{
+	double rate;	
+	int i, j, ileft, iright, jdown, jup, deltaE;
+	i = int(Lx*std_rand());
+	j = int(Ly*std_rand());
+	if(i == 0) ileft = Lx - 1;
+	else ileft = i - 1;
+	
+	if(i == Lx - 1) iright = 0;
+	else iright = i + 1;
 
-void MonteCarloSweep() {
-	int i;
-	for (i = 0; i < N; i++)	MetropolisStep();
-	steps++;
+	if(j == 0) jdown = Ly - 1;
+	else jdown = j - 1;
+
+	if(j == Ly - 1) jup = 0;
+	else jup = j + 1;
+	deltaE = 2 * spinmesh[i][j] * (spinmesh[ileft][j] + spinmesh[iright][j] + spinmesh[i][jdown] + spinmesh[i][jup]);
+	rate = BoltzmannFactors[deltaE + 8];
+	if (std_rand() < rate) spinmesh[i][j] = -spinmesh[i][j];	
+	}
 }
 
 double Magnetization() {
-	int sum = 0, i, j;
-	for (i = 0; i < Lx; i++){
-		for (j = 0; j < Ly; j++) {
-			sum += s[i][j];
+	int szsum = 0;
+	double szpersite=0.0;
+	for (int i = 0; i < Lx; i++)
+	{
+		for (int j = 0; j < Ly; j++) 
+		{
+			szsum += spinmesh[i][j];
 		}
 	}
-	return sum / double(N);
+	szpersite=szsum / double(N);
+	return szpersite;
 }
 
 double Energy() {
-	int sum = 0, i, j, iNext, jNext;
-	for (i = 0; i < Lx; i++){
-		for (j = 0; j < Ly; j++) {
+	int Esum = 0, iright, jup;
+	double Epersite=0.0;
+	for (int i = 0; i < Lx; i++)
+	{
+		for (int j = 0; j < Ly; j++) 
+		{
 			// periodic boundary condition
-			if(i == Lx - 1) iNext = 0;
-			else iNext = i + 1;
+			if(i == Lx - 1) iright = 0;
+			else iright = i + 1;
 			
-			if(j == Ly - 1) jNext = 0;
-			else jNext = j + 1;
+			if(j == Ly - 1) jup = 0;
+			else jup = j + 1;
 
-			sum += s[i][j] * (s[iNext][j] + s[i][jNext]);
+			Esum += spinmesh[i][j] * (spinmesh[iright][j] + spinmesh[i][jup]);
 		}
 	}
-	return (-J*sum) / double(N);
+	Epersite=(-J*Esum) / double(N);
+	return Epersite;
 }
 
-double Magnetization2() {
-	int sum = 0, i, j;
-	for (i = 0; i < Lx; i++){
-		for (j = 0; j < Ly; j++) {
-			sum += s[i][j] * s[i][j];
+double M2() {
+	int E2sum = 0;
+	double sz2persite=0.0;
+	for (int i = 0; i < Lx; i++)
+	{
+		for (int j = 0; j < Ly; j++) 
+		{
+			E2sum += spinmesh[i][j] * spinmesh[i][j];
 		}
 	}
-	return sum / double(N);
+	sz2persite=E2sum / double(N);
+	return sz2persite;
 }
 
-void Accumulate() {
-	int i;
+void scrambling() {
 	double e = Energy();
 	double m = Magnetization();
-	double m2 = Magnetization2();	
-	if (eSave.size() == nSave) {   	
-		eAv += e;
-		mAv += m;
-		m2Av += m2;
-		cee[0] += e * e;
-		cmm[0] += m * m;
-		Count++;
-		list<double>::const_iterator ie = eSave.begin(), im = mSave.begin();
-		for (i = 1; i <= nSave; i++) {
-			cee[i] += *ie++ * e;
-			cmm[i] += *im++ * m;
+	double m2 = M2();	
+	if (elist.size() == ncorrt) 
+	{   	
+		eacu += e;
+		macu += m;
+		m2ac += m2;
+		corree[0] += e * e;
+		corrmm[0] += m * m;
+		Config++;
+		list<double>::const_iterator ie = elist.begin(), im = mlist.begin();
+		for (int i = 1; i <= ncorrt; i++) 
+		{
+			//corree[i] += *ie++ * e;
+			corree[i] =corree[i] + *ie++ * e;
+			//corrmm[i] += *im++ * m;
+		    corrmm[i] =corrmm[i] + *im++ * m;
 		}
-		eSave.pop_back();
-		mSave.pop_back();
+		elist.pop_back();
+		mlist.pop_back();
 	}
-	eSave.push_front(e);
-	mSave.push_front(m);
+	elist.push_front(e);
+	mlist.push_front(m);
 }
 
 double tau_e, tau_m, tau_m2, evee, evem, evem2, stde, stdm;
-
+/*
 void Compute() {
-	int i;
 	// energy correlation
-	double av = eAv / Count;
-	double c0 = cee[0] / Count - av * av;
+	double av = eacu / Config;
+	double c0 = corree[0] / Config - av * av;
 	tau_e = 0;
-	for (i = 1; i <= nSave; i++)	tau_e += (cee[i] / Count - av * av) / c0;
+	for (int i = 1; i <= ncorrt; i++)	tau_e += (corree[i] / Config - av * av) / c0;
 	// magnetization correlation
-	av = mAv / Count;
-	c0 = cmm[0] / Count - av * av;
+	av = macu / Config;
+	c0 = corrmm[0] / Config - av * av;
 	tau_m = 0;
-	for (i = 1; i <= nSave; i++)	tau_m += (cmm[i] / Count - av * av) / c0;
+	for (int i = 1; i <= ncorrt; i++)	tau_m += (corrmm[i] / Config - av * av) / c0;
 	// m^2 correlation
-	av = cmm[0] / Count;
-	c0 = cmm[0] / Count - av * av;
+	av = corrmm[0] / Config;
+	c0 = corrmm[0] / Config - av * av;
 	tau_m2 = 0;
-	for (i = 1; i <= nSave; i++)	tau_m2 += (cmm[i] / Count - av * av) / c0;
+	for (int i = 1; i <= ncorrt; i++)	tau_m2 += (corrmm[i] / Config - av * av) / c0;
 	// everage e, m, m^2
-	evee = eAv / Count;
-	evem = mAv / Count;
-	evem2 = m2Av / Count;
+	evee = eacu / Config;
+	evem = macu / Config;
+	evem2 = m2ac / Config;
 	// standard devation stde, stdm
-	stde = sqrt(fabs(eAv * eAv / Count / Count - cee[0] / Count));
-	stdm = sqrt(fabs(mAv * mAv / Count / Count - cmm[0] / Count));
+	stde = sqrt(fabs(eacu * eacu / Config / Config - corree[0] / Config));
+	stdm = sqrt(fabs(macu * macu / Config / Config - corrmm[0] / Config));
 }
-
+*/
 int main(int argc, char *argv[]) {
 
-	int i, s, trialsteps;
-	Lx = 20;
+	int trialsteps;
+	Lx = 40;
 	Ly = Lx;
 	N = Lx * Ly;
-	// Temperature from 1.5 to 4.0 with steps 0.1 
-	double T1 = 1.5, T2 = 4.0;
+	// Temperature from 0.5 to 4.0 with steps 0.1 
+	double T1 = 0.5, T2 = 4.0;
 	// trial steps 10000, MC steps 10000000
-	int TSteps = 25, MCSteps = 10000000;
+	int nT = 35, MCSweep = 10000000;
 	// output M, M^2, E function of T 
 	ofstream file("isingT.txt");
 	// output E, M per MC sweep at T = 1.6
 	ofstream file1("isingEM.txt");
 	Initialize();	
-	trialsteps = int(0.001 * MCSteps);
-	for (i = 0; i <= TSteps; i++) {
-		T = T1 + i * (T2 - T1) / double(TSteps);
+	trialsteps = int(0.01 * MCSweep);
+	for (int i = 0; i <= nT; i++) 
+	{
+		T = T1 + i * (T2 - T1) / double(nT);
 		ComputeBoltzmannFactors();
-		for (s = 0; s < trialsteps; s++) {
-			MonteCarloSweep();
-			if (T == 1.6) file1 << Energy() << " " << Magnetization() << endl;
+		for (int i = 0; i < trialsteps; i++) {
+			MCScreen();
+//			if (T == Ttarget) file1 << Energy() << " " << Magnetization() << endl;
 		}				
-		InitializeData();		
-		for (s = 0; s < MCSteps; s++) {
-			MonteCarloSweep();
-			Accumulate();		
+		Initiallist();		
+		for (int i = 0; i < MCSweep; i++) {
+			MCScreen(); // MC updated to a configuration of spin system with at time t 
+			if (T == Ttarget) file1 << Energy() << " " << Magnetization() << endl;			
+			scrambling();		
 		}
-		cout << "completed" << ((T - 1.5) * 100.0 / 2.5) << "% " <<endl ;
-		Compute();
+		cout <<  T << "completed" <<endl ;
+//		Compute();
+	// energy correlation
+	    double av = eacu / Config;
+		double c0 = corree[0] / Config - av * av;
+		tau_e = 0;
+		for (int i = 1; i <= ncorrt; i++)	tau_e += (corree[i] / Config - av * av) / c0;
+	// magnetization correlation
+		av = macu / Config;
+		c0 = corrmm[0] / Config - av * av;
+		tau_m = 0;
+		for (int i = 1; i <= ncorrt; i++)	tau_m += (corrmm[i] / Config - av * av) / c0;
+	// m^2 correlation
+		av = corrmm[0] / Config;
+		c0 = corrmm[0] / Config - av * av;
+		tau_m2 = 0;
+		for (int i = 1; i <= ncorrt; i++)	tau_m2 += (corrmm[i] / Config - av * av) / c0;
+	// everage e, m, m^2
+		evee = eacu / Config;
+		evem = macu / Config;
+		evem2 = m2ac / Config;
+	// standard devation stde, stdm
+		stde = sqrt(fabs(eacu * eacu / Config / Config - corree[0] / Config));
+		stdm = sqrt(fabs(macu * macu / Config / Config - corrmm[0] / Config));
 		file << T << ' ' << tau_e << ' ' << tau_m << ' ' << tau_m2 << ' ' << evee << ' ' << evem << ' ' << evem2 << ' ' << stde << ' ' << stdm << endl;
 	}
 	file.close();
